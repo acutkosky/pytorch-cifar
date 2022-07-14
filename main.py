@@ -19,6 +19,9 @@ parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true',
                     help='resume from checkpoint')
+parser.add_argument('--wandb_project', default=None, help='set wandb project default loads from wand login setting in environment variable')
+parser.add_argument('--scale', action='store_true')
+parser.add_argument('--arch', default='resnet18')
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -55,7 +58,7 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer',
 # Model
 print('==> Building model..')
 # net = VGG('VGG19')
-# net = ResNet18()
+net = ResNet18(args.scale)
 # net = PreActResNet18()
 # net = GoogLeNet()
 # net = DenseNet121()
@@ -68,7 +71,7 @@ print('==> Building model..')
 # net = ShuffleNetV2(1)
 # net = EfficientNetB0()
 # net = RegNetX_200MF()
-net = SimpleDLA()
+# net = SimpleDLA()
 net = net.to(device)
 if device == 'cuda':
     net = torch.nn.DataParallel(net)
@@ -90,7 +93,7 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
 
 
 # Training
-def train(epoch):
+def train(epoch, examples=0, it_total):
     print('\nEpoch: %d' % epoch)
     net.train()
     train_loss = 0
@@ -108,17 +111,34 @@ def train(epoch):
         _, predicted = outputs.max(1)
         total += targets.size(0)
         correct += predicted.eq(targets).sum().item()
+        examples += targets.size(0)
+        it_total += 1
+        wandb.log({
+            'examples': examples,
+            'epoch': epoch,
+            'train/accuracy': correct/total,
+            'train/loss': train_loss/(batch_idx+1)
+            },
+            step = it_total)
+
+
+i                        wandb.log({
+                            prefix + k: result,
+                            },
+                            step = it_total)
 
         progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                      % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
+    return examples, it_total
 
 
-def test(epoch):
+def test(epoch, it_total):
     global best_acc
     net.eval()
     test_loss = 0
     correct = 0
     total = 0
+    test_iter = 0
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(testloader):
             inputs, targets = inputs.to(device), targets.to(device)
@@ -129,12 +149,19 @@ def test(epoch):
             _, predicted = outputs.max(1)
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
+            test_iter += 1
 
             progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                          % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
     # Save checkpoint.
     acc = 100.*correct/total
+
+    wandb.log({
+        'test/accuracy': correct/total,
+        'test/loss': test_loss/test_iter,
+        },
+        step = it_total)
     if acc > best_acc:
         print('Saving..')
         state = {
@@ -147,8 +174,12 @@ def test(epoch):
         torch.save(state, './checkpoint/ckpt.pth')
         best_acc = acc
 
+wandb.init(project=args.wandb_project)
+wandb.config.update(args)
 
+examples = 0
+it_total = 0
 for epoch in range(start_epoch, start_epoch+200):
-    train(epoch)
-    test(epoch)
+    examples, it_total train(epoch, examples, it_total)
+    test(epoch, it_total)
     scheduler.step()
