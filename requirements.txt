@@ -1,2 +1,4 @@
 wandb
+pillow
+tqdm
 

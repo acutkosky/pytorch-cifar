@@ -12,7 +12,8 @@ import os
 import argparse
 
 from models import *
-from utils import progress_bar
+from tqdm import tqdm
+import wandb
 
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
@@ -20,8 +21,12 @@ parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true',
                     help='resume from checkpoint')
 parser.add_argument('--wandb_project', default=None, help='set wandb project default loads from wand login setting in environment variable')
-parser.add_argument('--scale', action='store_true')
-parser.add_argument('--arch', default='resnet18')
+parser.add_argument('--scale', type=str, default='none', choices=['none', 'native', 'separate'])
+parser.add_argument('--threshold', type=float, default=0.01)
+parser.add_argument('--stagewise', type=str, default='all', choices=['all', 'forward', 'backward'])
+parser.add_argument('--patience', type=int, default=10)
+parser.add_argument('--arch', default='resnet18', choices=['resnet18', 'preactresnet18'])
+parser.add_argument('--wd', default=5e-4, type=float)
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -58,7 +63,10 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer',
 # Model
 print('==> Building model..')
 # net = VGG('VGG19')
-net = ResNet18(args.scale)
+if args.arch == 'resnet18':
+    net = ResNet18(args.scale)
+if args.arch == 'preactresnet18':
+    net = PreActResNet18(scale=args.scale, stagewise=args.stagewise)
 # net = PreActResNet18()
 # net = GoogLeNet()
 # net = DenseNet121()
@@ -88,18 +96,19 @@ if args.resume:
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=args.lr,
-                      momentum=0.9, weight_decay=5e-4)
+                      momentum=0.9, weight_decay=args.wd)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
 
 
 # Training
-def train(epoch, examples=0, it_total):
+def train(epoch, examples, it_total):
     print('\nEpoch: %d' % epoch)
     net.train()
     train_loss = 0
     correct = 0
     total = 0
-    for batch_idx, (inputs, targets) in enumerate(trainloader):
+    pbar = tqdm(enumerate(trainloader), total=len(trainloader))
+    for batch_idx, (inputs, targets) in pbar:
         inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
         outputs = net(inputs)
@@ -122,12 +131,7 @@ def train(epoch, examples=0, it_total):
             step = it_total)
 
 
-i                        wandb.log({
-                            prefix + k: result,
-                            },
-                            step = it_total)
-
-        progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+        pbar.set_description('Loss: %.3f | Acc: %.3f%% (%d/%d)'
                      % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
     return examples, it_total
 
@@ -140,7 +144,8 @@ def test(epoch, it_total):
     total = 0
     test_iter = 0
     with torch.no_grad():
-        for batch_idx, (inputs, targets) in enumerate(testloader):
+        pbar = tqdm(enumerate(testloader), total=len(testloader))
+        for batch_idx, (inputs, targets) in pbar:
             inputs, targets = inputs.to(device), targets.to(device)
             outputs = net(inputs)
             loss = criterion(outputs, targets)
@@ -151,11 +156,10 @@ def test(epoch, it_total):
             correct += predicted.eq(targets).sum().item()
             test_iter += 1
 
-            progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-                         % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
+            pbar.set_description('Loss: %.3f | Acc: %.3f%% (%d/%d)' % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
     # Save checkpoint.
-    acc = 100.*correct/total
+    acc = correct/total
 
     wandb.log({
         'test/accuracy': correct/total,
@@ -173,13 +177,48 @@ def test(epoch, it_total):
             os.mkdir('checkpoint')
         torch.save(state, './checkpoint/ckpt.pth')
         best_acc = acc
+    return correct/total
 
 wandb.init(project=args.wandb_project)
 wandb.config.update(args)
 
 examples = 0
 it_total = 0
+activate_best_acc = 0
+patience = args.patience
+bad_epochs = 0
+activations = 0
 for epoch in range(start_epoch, start_epoch+200):
-    examples, it_total train(epoch, examples, it_total)
-    test(epoch, it_total)
+    examples, it_total = train(epoch, examples, it_total)
+    acc = test(epoch, it_total)
+    if acc < (activate_best_acc + args.threshold):
+        bad_epochs += 1
+        # print(f'a bad epoch: acc: {acc}, best_acc: {best_acc}, bad_epochs: {bad_epochs}, epoch count: {epoch}')
+    else:
+        activate_best_acc = acc
+        bad_epochs = 0
+        # print(f'a good epoch: acc: {acc}, best_acc: {best_acc}, bad_epochs: {bad_epochs}, epoch count: {epoch}')
+    wandb.log({
+        'best_acc_threshold': activate_best_acc + args.threshold,
+        },
+        step = it_total)
+    wandb.log({
+        'acc': acc,
+        },
+        step = it_total)
+    wandb.log({
+        'bad_epochs': bad_epochs,
+        },
+        step = it_total)
+    if bad_epochs > patience and args.stagewise != 'all':
+        if args.stagewise == 'forward':
+            activations = net.module.activate()
+        if args.stagewise == 'backward':
+            activations = net.module.activate(-1)
+        # activations += 1
+        bad_epochs = 0
+    wandb.log({
+        'activations': activations,
+        },
+        step = it_total)
     scheduler.step()

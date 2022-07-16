@@ -4,7 +4,7 @@
 #$ -pe omp 4
 
 # Request 4 GPU
-#$ -l gpus=2
+#$ -l gpus=1
 
 # Request at least capability 3.5/6.0/7.0
 #$ -l gpu_c=7.0
@@ -13,13 +13,13 @@
 #$ -P aclab
 
 #merge the error and output
-# -j y
+#$ -j y
 
 #send email at the end
-#$ -m e
+#$ -m b
 
-# Set maximum time to 1 days
-#$ -l h_rt=24:00:00
+# Set maximum time to 12 days
+#$# -l h_rt=12:00:00
 
 
 
@@ -28,5 +28,6 @@ module load pytorch
 module load tensorflow
 
 source env/bin/activate
-
-python main.py --scale
+cmd="python main.py --arch=$1 --scale=$2 --stagewise=$3 --wd=$4 --patience=$5 --threshold=$6"
+echo $cmd
+$cmd
