@@ -34,8 +34,10 @@ class PreActBlock(nn.Module):
             with torch.no_grad():
                 self.conv2.weight *= 0.0001
         if scale == 'both':
+            print("scale is both: ",self.scale)
              with torch.no_grad():
-                self.conv2.weight *= 0.0           
+                self.conv2.weight *= 0.0      
+        self.printed = 0  
 
 
     def forward(self, x):
@@ -52,6 +54,10 @@ class PreActBlock(nn.Module):
                 wandb.log({
                     f'scales/nothing': 0.0
                 }, commit=False)
+                if self.printed < 10:
+                    print("activated!")
+                    print("scale: ", self.scale_factor)
+                    self.printed += 1
             out += shortcut
         else:
             out = shortcut
