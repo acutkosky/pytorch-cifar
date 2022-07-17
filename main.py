@@ -25,7 +25,7 @@ parser.add_argument('--scale', type=str, default='none', choices=['none', 'nativ
 parser.add_argument('--threshold', type=float, default=0.01)
 parser.add_argument('--stagewise', type=str, default='all', choices=['all', 'forward', 'backward'])
 parser.add_argument('--patience', type=int, default=10)
-parser.add_argument('-layer_count', type=int, default=4)
+parser.add_argument('--layer_count', type=int, default=4)
 parser.add_argument('--arch', default='resnet18', choices=['resnet18', 'preactresnet18', 'preactresnetmany'])
 parser.add_argument('--wd', default=5e-4, type=float)
 args = parser.parse_args()
