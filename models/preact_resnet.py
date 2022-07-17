@@ -48,7 +48,7 @@ class PreActBlock(nn.Module):
         if self.id in self.activations:
             out = self.conv1(out)
             out = self.conv2(F.relu(self.bn2(out)))
-            if self.scale == 'separate' or self.scale == 'both':
+            if self.scale == 'separate':
                 out *= torch.tanh(self.scale_factor)
                 wandb.log({
                     f'scales/{self.id}': self.scale_factor.item()
