@@ -99,9 +99,6 @@ if args.resume:
     start_epoch = checkpoint['epoch']
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(net.parameters(), lr=args.lr,
-                      momentum=0.9, weight_decay=args.wd)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
 
 
 # Training
@@ -186,15 +183,26 @@ def test(epoch, it_total):
 wandb.init(project=args.wandb_project)
 wandb.config.update(args)
 
+
+patience = args.patience
+
+
 examples = 0
 it_total = 0
 activate_best_acc = 0
-patience = args.patience
-bad_epochs = 0
 activations = 0
 
-def run_training():
-    for epoch in range(start_epoch, start_epoch+200):
+def run_training(epoch_count, it_total, examples, activate_best_acc, activations):
+
+    patience = args.patience
+
+
+    bad_epochs = 0
+
+    optimizer = optim.SGD(net.parameters(), lr=args.lr,
+                        momentum=0.9, weight_decay=args.wd)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_count)
+    for epoch in range(start_epoch, start_epoch+epoch_count):
         examples, it_total = train(epoch, examples, it_total)
         acc = test(epoch, it_total)
         if acc < (activate_best_acc + args.threshold):
@@ -229,6 +237,8 @@ def run_training():
             step = it_total)
         scheduler.step()
 
+    return it_total, examples, activate_best_acc, activations
+
 
 
 if args.retrain != 'no':
@@ -239,7 +249,8 @@ if args.retrain != 'no':
             net.module.activate(-1)
 
 
-run_training()
+
+it_total, examples, activate_best_acc, activations = run_training(200, it_total, examples, activate_best_acc, activations)
 
 if args.retrain != 'no':
     net.module.activate()
@@ -248,4 +259,4 @@ if args.retrain != 'no':
                         momentum=0.9, weight_decay=args.wd)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
 
-    run_training()
+    run_training(20, it_total, examples, activate_best_acc, activations)
