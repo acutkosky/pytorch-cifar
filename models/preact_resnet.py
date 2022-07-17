@@ -16,6 +16,8 @@ class PreActBlock(nn.Module):
 
     def __init__(self, in_planes, planes, stride=1, scale='none', id=0, activations=[0], **kwargs):
         super(PreActBlock, self).__init__()
+        print("preactblock: scale: ",scale)
+        print("preactblock: kwargs: ",kwargs)
         self.bn1 = nn.BatchNorm2d(in_planes)
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
@@ -35,7 +37,7 @@ class PreActBlock(nn.Module):
                 self.conv2.weight *= 0.0001
         if scale == 'both':
             print("scale is both: ",self.scale)
-             with torch.no_grad():
+            with torch.no_grad():
                 self.conv2.weight *= 0.0      
         self.printed = 0  
 
@@ -93,7 +95,7 @@ class PreActBottleneck(nn.Module):
 
 
 class PreActResNet(nn.Module):
-    def __init__(self, block, num_blocks, num_classes=10, scale='none', stagewise='all', **kwargs):
+    def __init__(self, block, num_blocks, num_classes=10, stagewise='all', **kwargs):
         super(PreActResNet, self).__init__()
         self.in_planes = 64
 
@@ -117,6 +119,7 @@ class PreActResNet(nn.Module):
     def _make_layer(self, block, planes, num_blocks, stride, **kwargs):
         strides = [stride] + [1]*(num_blocks-1)
         layers = []
+        print("kwargs: ",kwargs)
         for stride in strides:
             self.num_blocks += 1
             layers.append(block(self.in_planes, planes, stride, id=self.num_blocks, activations=self.activated_layers, **kwargs))
