@@ -27,11 +27,14 @@ class PreActBlock(nn.Module):
         self.scale = scale
         self.id = id
         self.activations = activations
-        if scale == 'separate':
+        if scale == 'separate' or scale == 'both':
             self.scale_factor = nn.Parameter(torch.zeros(1))
         if scale == 'native':
             with torch.no_grad():
-                self.conv2.weight *= 0.0
+                self.conv2.weight *= 0.0001
+        if scale == 'both':
+             with torch.no_grad():
+                self.conv2.weight *= 0.0           
 
 
     def forward(self, x):
@@ -40,8 +43,8 @@ class PreActBlock(nn.Module):
         if self.id in self.activations:
             out = self.conv1(out)
             out = self.conv2(F.relu(self.bn2(out)))
-            if self.scale == 'separate':
-                out *= self.scale_factor
+            if self.scale == 'separate' or self.scale == 'both':
+                out *= torch.tanh(self.scale_factor)
             out += shortcut
         else:
             out = shortcut
