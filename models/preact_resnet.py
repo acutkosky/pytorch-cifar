@@ -49,6 +49,9 @@ class PreActBlock(nn.Module):
                 wandb.log({
                     f'scales/{self.id}': self.scale_factor.item()
                 }, commit=False)
+                wandb.log({
+                    f'scales/nothing': 0.0
+                }, commit=False)
             out += shortcut
         else:
             out = shortcut
