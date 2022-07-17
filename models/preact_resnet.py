@@ -31,7 +31,7 @@ class PreActBlock(nn.Module):
             self.scale_factor = nn.Parameter(torch.zeros(1))
         if scale == 'native':
             with torch.no_grad():
-                self.conv2.weight *= 0.0001
+                self.conv2.weight *= 0.0
 
 
     def forward(self, x):
