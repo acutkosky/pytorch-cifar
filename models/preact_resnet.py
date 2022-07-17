@@ -58,7 +58,7 @@ class PreActBlock(nn.Module):
                 }, commit=False)
                 if self.printed < 10:
                     print("activated!")
-                    print("scale: ", self.scale_factor)
+                    print("id: ",self.id, " scale: ", self.scale_factor)
                     self.printed += 1
             out += shortcut
         else:
@@ -154,6 +154,9 @@ class PreActResNet(nn.Module):
 
 def PreActResNet18(**kwargs):
     return PreActResNet(PreActBlock, [2,2,2,2], **kwargs)
+
+def PreActResNetMany(layer_count, **kwargs):
+    return PreActResNet(PreActBlock, [2]*layer_count, **kwargs)
 
 def PreActResNet34():
     return PreActResNet(PreActBlock, [3,4,6,3])

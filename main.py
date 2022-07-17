@@ -21,11 +21,12 @@ parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true',
                     help='resume from checkpoint')
 parser.add_argument('--wandb_project', default=None, help='set wandb project default loads from wand login setting in environment variable')
-parser.add_argument('--scale', type=str, default='none', choices=['none', 'native', 'separate'])
+parser.add_argument('--scale', type=str, default='none', choices=['none', 'native', 'separate', 'both'])
 parser.add_argument('--threshold', type=float, default=0.01)
 parser.add_argument('--stagewise', type=str, default='all', choices=['all', 'forward', 'backward'])
 parser.add_argument('--patience', type=int, default=10)
-parser.add_argument('--arch', default='resnet18', choices=['resnet18', 'preactresnet18'])
+parser.add_argument('-layer_count', type=int, default=4)
+parser.add_argument('--arch', default='resnet18', choices=['resnet18', 'preactresnet18', 'preactresnetmany'])
 parser.add_argument('--wd', default=5e-4, type=float)
 args = parser.parse_args()
 
@@ -67,6 +68,8 @@ if args.arch == 'resnet18':
     net = ResNet18(args.scale)
 if args.arch == 'preactresnet18':
     net = PreActResNet18(scale=args.scale, stagewise=args.stagewise)
+if args.arch == 'preactresnetmany':
+    net = PreActResNetMany(layer_count=args.layer_count, scale=args.scale, stagewise=args.stagewise)
 # net = PreActResNet18()
 # net = GoogLeNet()
 # net = DenseNet121()
