@@ -7,6 +7,7 @@ Reference:
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import wandb
 
 
 class PreActBlock(nn.Module):
@@ -45,6 +46,9 @@ class PreActBlock(nn.Module):
             out = self.conv2(F.relu(self.bn2(out)))
             if self.scale == 'separate' or self.scale == 'both':
                 out *= torch.tanh(self.scale_factor)
+                wandb.log({
+                    f'scales/{self.id}': self.scale_factor.item()
+                }, commit=False)
             out += shortcut
         else:
             out = shortcut
