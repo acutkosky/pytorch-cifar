@@ -11,6 +11,8 @@ import torchvision.transforms as transforms
 import os
 import argparse
 
+import sys
+
 from models import *
 from tqdm import tqdm
 import wandb
@@ -184,13 +186,7 @@ wandb.init(project=args.wandb_project)
 wandb.config.update(args)
 
 
-patience = args.patience
 
-
-examples = 0
-it_total = 0
-activate_best_acc = 0
-activations = 0
 
 def run_training(epoch_count, it_total, examples, activate_best_acc, activations):
 
@@ -225,12 +221,15 @@ def run_training(epoch_count, it_total, examples, activate_best_acc, activations
             },
             step = it_total)
         if bad_epochs > patience and args.stagewise != 'all':
-            if args.stagewise == 'forward':
-                activations = net.module.activate()
-            if args.stagewise == 'backward':
-                activations = net.module.activate(-1)
+            if args.retrain == 'no':
+                if args.stagewise == 'forward':
+                    activations = net.module.activate()
+                if args.stagewise == 'backward':
+                    activations = net.module.activate(-1)
             # activations += 1
             bad_epochs = 0
+        activations = net.module.activation_count()
+        
         wandb.log({
             'activations': activations,
             },
@@ -242,13 +241,18 @@ def run_training(epoch_count, it_total, examples, activate_best_acc, activations
 
 
 if args.retrain != 'no':
-    while len(net.module.unactivated_ids)>2:
+    while len(net.module.unactivated_ids)>1:
+        print(f"calling activate because unactivated ids is : {net.module.unactivated_ids}")
         if args.retrain == 'first':
             net.module.activate()
         else:
             net.module.activate(-1)
-
-
+print(f"active ids: {net.module.activated_layers}")
+# sys.exit(0)
+examples = 0
+it_total = 0
+activate_best_acc = 0
+activations = 0
 
 it_total, examples, activate_best_acc, activations = run_training(200, it_total, examples, activate_best_acc, activations)
 

@@ -30,8 +30,9 @@ class PreActBlock(nn.Module):
         self.scale = scale
         self.id = id
         self.activations = activations
-        if scale == 'separate' or scale == 'both':
-            self.scale_factor = nn.Parameter(torch.zeros(1))
+        self.scale_factor = nn.Parameter(torch.zeros(1))
+        # if scale == 'separate' or scale == 'both':
+        #     self.scale_factor = nn.Parameter(torch.zeros(1))
         if scale == 'native':
             with torch.no_grad():
                 self.conv2.weight *= 0.0001
@@ -56,10 +57,10 @@ class PreActBlock(nn.Module):
                 wandb.log({
                     f'scales/nothing': 0.0
                 }, commit=False)
-                if self.printed < 10:
-                    print("activated!")
-                    print("id: ",self.id, " scale: ", self.scale_factor)
-                    self.printed += 1
+            if self.printed < 10:
+                print("activated!")
+                print("id: ",self.id, " scale: ", self.scale_factor)
+                self.printed += 1
             out += shortcut
         else:
             out = shortcut
@@ -96,6 +97,7 @@ class PreActBottleneck(nn.Module):
 
 class PreActResNet(nn.Module):
     def __init__(self, block, num_blocks, num_classes=10, stagewise='all', **kwargs):
+        print(f"creating resnet: stagewise: {stagewise}, kwards: {kwargs}")
         super(PreActResNet, self).__init__()
         self.in_planes = 64
 
@@ -113,8 +115,9 @@ class PreActResNet(nn.Module):
         if stagewise == 'all':
             for i in range(1, self.num_blocks+1):
                 self.activated_layers.append(i)
-
-        self.unactivated_ids = list(range(1, self.num_blocks+1))
+            self.unactivated_ids = []
+        else:
+            self.unactivated_ids = list(range(1, self.num_blocks+1))
 
     def _make_layer(self, block, planes, num_blocks, stride, **kwargs):
         strides = [stride] + [1]*(num_blocks-1)
@@ -127,6 +130,7 @@ class PreActResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def activate(self, to_activate=None):
+        print(f"activate called: to_activate {to_activate}")
         if len(self.unactivated_ids) == 0:
             return len(self.activated_layers) - 1
         if to_activate is None:
@@ -138,6 +142,9 @@ class PreActResNet(nn.Module):
         self.activated_layers.append(to_activate)
         
         return len(self.activated_layers) - 1 
+
+    def activation_count(self):
+        return len(self.activated_layers) - 1
 
 
     def forward(self, x):
