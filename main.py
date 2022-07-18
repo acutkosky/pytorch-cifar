@@ -102,7 +102,7 @@ criterion = nn.CrossEntropyLoss()
 
 
 # Training
-def train(epoch, examples, it_total):
+def train(epoch, examples, it_total, optimizer):
     print('\nEpoch: %d' % epoch)
     net.train()
     train_loss = 0
@@ -203,7 +203,7 @@ def run_training(epoch_count, it_total, examples, activate_best_acc, activations
                         momentum=0.9, weight_decay=args.wd)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_count)
     for epoch in range(start_epoch, start_epoch+epoch_count):
-        examples, it_total = train(epoch, examples, it_total)
+        examples, it_total = train(epoch, examples, it_total, optimizer)
         acc = test(epoch, it_total)
         if acc < (activate_best_acc + args.threshold):
             bad_epochs += 1
@@ -255,8 +255,5 @@ it_total, examples, activate_best_acc, activations = run_training(200, it_total,
 if args.retrain != 'no':
     net.module.activate()
 
-    optimizer = optim.SGD(net.parameters(), lr=args.lr,
-                        momentum=0.9, weight_decay=args.wd)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
 
     run_training(20, it_total, examples, activate_best_acc, activations)
