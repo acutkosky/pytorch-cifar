@@ -34,7 +34,7 @@ class PreActBlock(nn.Module):
             self.scale_factor = nn.Parameter(torch.zeros(1))
         if scale == 'native':
             with torch.no_grad():
-                self.conv2.weight *= 0.0001
+                self.conv2.weight *= 0.00001
         if scale == 'both':
             print("scale is both: ",self.scale)
             with torch.no_grad():
@@ -113,8 +113,9 @@ class PreActResNet(nn.Module):
         if stagewise == 'all':
             for i in range(1, self.num_blocks+1):
                 self.activated_layers.append(i)
-
-        self.unactivated_ids = list(range(1, self.num_blocks+1))
+            self.unactivated_ids = []
+        else:
+            self.unactivated_ids = list(range(1, self.num_blocks+1))
 
     def _make_layer(self, block, planes, num_blocks, stride, **kwargs):
         strides = [stride] + [1]*(num_blocks-1)
@@ -135,6 +136,9 @@ class PreActResNet(nn.Module):
             to_activate = self.unactivated_ids.pop(0)
         elif to_activate <= self.num_blocks and to_activate in self.unactivated_ids:
             self.unactivated_ids.remove(to_activate)
+        
+        assert(to_activate not in self.activated_layers)
+        
         self.activated_layers.append(to_activate)
         
         return len(self.activated_layers) - 1 
