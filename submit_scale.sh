@@ -28,6 +28,6 @@ module load pytorch
 module load tensorflow
 
 source env/bin/activate
-cmd="python main.py --arch=$1 --scale=$2 --stagewise=$3 --wd=$4 --patience=$5 --threshold=$6 --retrain=$8 --tag=$9"
+cmd="python main.py --arch=$1 --scale=$2 --stagewise=$3 --wd=$4 --patience=$5 --threshold=$6 --retrain=$8 --tag=$9 --retrain_addition=${10}"
 echo $cmd
 $cmd
