@@ -15,6 +15,7 @@ from models import *
 from tqdm import tqdm
 import wandb
 
+torch.manual_seed(0)
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
@@ -25,9 +26,11 @@ parser.add_argument('--scale', type=str, default='none', choices=['none', 'nativ
 parser.add_argument('--threshold', type=float, default=0.01)
 parser.add_argument('--stagewise', type=str, default='all', choices=['all', 'forward', 'backward'])
 parser.add_argument('--patience', type=int, default=10)
-parser.add_argument('--layer_count', type=int, default=4)
+parser.add_argument('--layer_count', type=int, default=2)
+parser.add_argument('--retrain', type=str, default='no', choices=['no', 'first', 'last'])
 parser.add_argument('--arch', default='resnet18', choices=['resnet18', 'preactresnet18', 'preactresnetmany'])
 parser.add_argument('--wd', default=5e-4, type=float)
+parser.add_argument('--tag', default='none')
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -98,13 +101,13 @@ if args.resume:
     start_epoch = checkpoint['epoch']
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(net.parameters(), lr=args.lr,
-                      momentum=0.9, weight_decay=args.wd)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
+# optimizer = optim.SGD(net.parameters(), lr=args.lr,
+#                       momentum=0.9, weight_decay=args.wd)
+# scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
 
 
 # Training
-def train(epoch, examples, it_total):
+def train(epoch, examples, it_total, optimizer):
     print('\nEpoch: %d' % epoch)
     net.train()
     train_loss = 0
@@ -191,37 +194,67 @@ activate_best_acc = 0
 patience = args.patience
 bad_epochs = 0
 activations = 0
-for epoch in range(start_epoch, start_epoch+200):
-    examples, it_total = train(epoch, examples, it_total)
-    acc = test(epoch, it_total)
-    if acc < (activate_best_acc + args.threshold):
-        bad_epochs += 1
-        # print(f'a bad epoch: acc: {acc}, best_acc: {best_acc}, bad_epochs: {bad_epochs}, epoch count: {epoch}')
-    else:
-        activate_best_acc = acc
-        bad_epochs = 0
-        # print(f'a good epoch: acc: {acc}, best_acc: {best_acc}, bad_epochs: {bad_epochs}, epoch count: {epoch}')
-    wandb.log({
-        'best_acc_threshold': activate_best_acc + args.threshold,
-        },
-        step = it_total)
-    wandb.log({
-        'acc': acc,
-        },
-        step = it_total)
-    wandb.log({
-        'bad_epochs': bad_epochs,
-        },
-        step = it_total)
-    if bad_epochs > patience and args.stagewise != 'all':
-        if args.stagewise == 'forward':
-            activations = net.module.activate()
-        if args.stagewise == 'backward':
-            activations = net.module.activate(-1)
-        # activations += 1
-        bad_epochs = 0
-    wandb.log({
-        'activations': activations,
-        },
-        step = it_total)
-    scheduler.step()
+epoch_count = 200
+retrain_epochs = 100
+
+def run_training(start_epoch, epoch_count, examples, it_total, activate_best_acc, patience, activations):
+    print(f"run_training args: {(start_epoch, epoch_count, examples, it_total, activate_best_acc, patience, activations)}")
+    optimizer = optim.SGD(net.parameters(), lr=args.lr,
+                        momentum=0.9, weight_decay=args.wd)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_count)
+    print(f"running for: {list(range(start_epoch, start_epoch+epoch_count))} epochs...")
+    for epoch in range(start_epoch, start_epoch+epoch_count):
+        examples, it_total = train(epoch, examples, it_total, optimizer)
+        acc = test(epoch, it_total)
+        if acc < (activate_best_acc + args.threshold):
+            bad_epochs += 1
+            # print(f'a bad epoch: acc: {acc}, best_acc: {best_acc}, bad_epochs: {bad_epochs}, epoch count: {epoch}')
+        else:
+            activate_best_acc = acc
+            bad_epochs = 0
+            # print(f'a good epoch: acc: {acc}, best_acc: {best_acc}, bad_epochs: {bad_epochs}, epoch count: {epoch}')
+        wandb.log({
+            'best_acc_threshold': activate_best_acc + args.threshold,
+            },
+            step = it_total)
+        wandb.log({
+            'acc': acc,
+            },
+            step = it_total)
+        wandb.log({
+            'bad_epochs': bad_epochs,
+            },
+            step = it_total)
+        if bad_epochs > patience and args.stagewise != 'all':
+            if args.stagewise == 'forward':
+                activations = net.module.activate()
+            if args.stagewise == 'backward':
+                activations = net.module.activate(-1)
+            # activations += 1
+            bad_epochs = 0
+        wandb.log({
+            'activations': activations,
+            },
+            step = it_total)
+        scheduler.step()
+    return examples, it_total, activate_best_acc, activations
+
+
+if args.retrain != 'no':
+    while len(net.module.unactivated_ids)>args.layer_count:
+        print(f"calling activate because unactivated ids is : {net.module.unactivated_ids}")
+        if args.retrain == 'first':
+            net.module.activate()
+        else:
+            net.module.activate(-1)
+
+examples, it_total, activate_best_acc, activations = run_training(start_epoch, epoch_count, examples, it_total, activate_best_acc, patience, activations)
+
+print("finished initial training!")
+
+if args.retrain != 'no':
+    while (len(net.module.unactivated_ids)>0):
+        net.module.activate()
+
+
+    run_training(epoch_count, retrain_epochs, examples, it_total, activate_best_acc, patience, activations)

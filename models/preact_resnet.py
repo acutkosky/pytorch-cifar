@@ -156,7 +156,7 @@ def PreActResNet18(**kwargs):
     return PreActResNet(PreActBlock, [2,2,2,2], **kwargs)
 
 def PreActResNetMany(layer_count, **kwargs):
-    return PreActResNet(PreActBlock, [2]*layer_count, **kwargs)
+    return PreActResNet(PreActBlock, [layer_count] * 4, **kwargs)
 
 def PreActResNet34():
     return PreActResNet(PreActBlock, [3,4,6,3])
