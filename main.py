@@ -1,4 +1,5 @@
 '''Train CIFAR10 with PyTorch.'''
+from termios import VSTART
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -17,6 +18,8 @@ from models import *
 from tqdm import tqdm
 import wandb
 
+torch.manual_seed(0)
+
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
@@ -31,17 +34,18 @@ parser.add_argument('--patience', type=int, default=10)
 parser.add_argument('--layer_count', type=int, default=4)
 parser.add_argument('--arch', default='resnet18', choices=['resnet18', 'preactresnet18', 'preactresnetmany'])
 parser.add_argument('--wd', default=5e-4, type=float)
+parser.add_argument('--tag', default='none')
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0  # best test accuracy
-start_epoch = 0  # start from epoch 0 or last checkpoint epoch
+# start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
 # Data
 print('==> Preparing data..')
 transform_train = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
-    transforms.RandomHorizontalFlip(),
+    # transforms.RandomCrop(32, padding=4),
+    # transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
 ])
@@ -54,7 +58,7 @@ transform_test = transforms.Compose([
 trainset = torchvision.datasets.CIFAR10(
     root='./data', train=True, download=True, transform=transform_train)
 trainloader = torch.utils.data.DataLoader(
-    trainset, batch_size=128, shuffle=True, num_workers=2)
+    trainset, batch_size=128, shuffle=False, num_workers=1)
 
 testset = torchvision.datasets.CIFAR10(
     root='./data', train=False, download=True, transform=transform_test)
@@ -125,6 +129,12 @@ def train(epoch, examples, it_total, optimizer):
         correct += predicted.eq(targets).sum().item()
         examples += targets.size(0)
         it_total += 1
+        if batch_idx < 10:
+            print("batch ids: ", batch_idx)
+            print("targets: ", targets)
+            print("outputs: ", outputs[0:3, :])
+            print("loss: ", loss)
+
         wandb.log({
             'examples': examples,
             'epoch': epoch,
@@ -186,9 +196,25 @@ wandb.init(project=args.wandb_project)
 wandb.config.update(args)
 
 
+patience = args.patience
+examples = 0
+it_total = 0
+activate_best_acc = 0
+activations = 0
+
+epoch_count = 200
+
+start_epoch = 0
+
+bad_epochs = 0
+
+optimizer = optim.SGD(net.parameters(), lr=args.lr,
+                    momentum=0.9, weight_decay=args.wd)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_count)
 
 
-def run_training(epoch_count, it_total, examples, activate_best_acc, activations):
+
+def run_training(start_epoch, epoch_count, it_total, examples, activate_best_acc, activations):
 
     patience = args.patience
 
@@ -241,7 +267,7 @@ def run_training(epoch_count, it_total, examples, activate_best_acc, activations
 
 
 if args.retrain != 'no':
-    while len(net.module.unactivated_ids)>1:
+    while len(net.module.unactivated_ids)>2:
         print(f"calling activate because unactivated ids is : {net.module.unactivated_ids}")
         if args.retrain == 'first':
             net.module.activate()
@@ -254,10 +280,66 @@ it_total = 0
 activate_best_acc = 0
 activations = 0
 
-it_total, examples, activate_best_acc, activations = run_training(200, it_total, examples, activate_best_acc, activations)
+# 5.89
+# 9.0054
+# 4.6717
+# 4.4001
+# 7.2848
+# 7.3075
+# 5.0595
+# 3.3912
+# 3.0902
+# 2.3206
+
+# batch ids:  2
+# targets:  tensor([7, 1, 3, 8, 5, 1, 1, 4, 0, 9, 3, 7, 4, 9, 9, 2, 4, 9, 9, 1, 0, 5, 9, 0,
+#         8, 2, 1, 2, 0, 5, 6, 3, 2, 7, 8, 8, 6, 0, 7, 9, 4, 5, 6, 4, 2, 1, 1, 2,
+#         1, 5, 9, 9, 0, 8, 4, 1, 1, 6, 3, 3, 9, 0, 7, 9, 7, 7, 9, 1, 5, 1, 6, 6,
+#         8, 7, 1, 3, 0, 3, 3, 2, 4, 5, 7, 5, 9, 0, 3, 4, 0, 4, 4, 6, 0, 0, 6, 6,
+#         0, 8, 1, 6, 2, 9, 2, 5, 9, 6, 7, 4, 1, 8, 7, 3, 6, 9, 3, 0, 4, 0, 5, 1,
+#         0, 3, 4, 8, 5, 4, 7, 2], device='cuda:0')
+# outputs:  tensor([[-0.5257, -4.8870,  0.6948,  1.0336,  0.5830, -1.2378,  1.9312,  0.4354,
+#           0.3671,  0.6964],
+#         [-0.3496, -5.0053,  0.4692,  0.9884,  0.2755, -1.2262,  1.7156,  0.6075,
+#           0.6559,  0.9933],
+#         [-0.2470, -5.3639,  0.4167,  1.0240,  0.2661, -1.1748,  1.9059,  0.6298,
+#           0.5770,  1.0837]], device='cuda:0', grad_fn=<SliceBackward0>)
+
+
+# VSTART
+# 8.9266
+# 7.453
+# 5.7323
+# 5.0634
+# 7.1471
+# 7.2774
+# 4.0503
+# 3.3912
+# 3.0902
+# 2.3206
+
+# batch ids:  2
+# targets:  tensor([7, 1, 3, 8, 5, 1, 1, 4, 0, 9, 3, 7, 4, 9, 9, 2, 4, 9, 9, 1, 0, 5, 9, 0,
+#         8, 2, 1, 2, 0, 5, 6, 3, 2, 7, 8, 8, 6, 0, 7, 9, 4, 5, 6, 4, 2, 1, 1, 2,
+#         1, 5, 9, 9, 0, 8, 4, 1, 1, 6, 3, 3, 9, 0, 7, 9, 7, 7, 9, 1, 5, 1, 6, 6,
+#         8, 7, 1, 3, 0, 3, 3, 2, 4, 5, 7, 5, 9, 0, 3, 4, 0, 4, 4, 6, 0, 0, 6, 6,
+#         0, 8, 1, 6, 2, 9, 2, 5, 9, 6, 7, 4, 1, 8, 7, 3, 6, 9, 3, 0, 4, 0, 5, 1,
+#         0, 3, 4, 8, 5, 4, 7, 2], device='cuda:0')
+# outputs:  tensor([[-0.5258, -4.8871,  0.6948,  1.0336,  0.5829, -1.2377,  1.9308,  0.4351,
+#           0.3670,  0.6962],
+#         [-0.3493, -5.0044,  0.4689,  0.9878,  0.2757, -1.2262,  1.7152,  0.6077,
+#           0.6561,  0.9931],
+#         [-0.2473, -5.3651,  0.4164,  1.0240,  0.2654, -1.1749,  1.9066,  0.6304,
+#           0.5765,  1.0835]], device='cuda:0', grad_fn=<SliceBackward0>)
+
+
+
+
+it_total, examples, activate_best_acc, activations = run_training(0, 200, it_total, examples, activate_best_acc, activations)
 
 if args.retrain != 'no':
-    net.module.activate()
+    while (len(net.module.unactivated_ids)>0):
+        net.module.activate()
 
 
-    run_training(20, it_total, examples, activate_best_acc, activations)
+    run_training(200, 100, it_total, examples, activate_best_acc, activations)

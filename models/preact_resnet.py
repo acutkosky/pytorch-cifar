@@ -39,7 +39,7 @@ class PreActBlock(nn.Module):
         if scale == 'both':
             print("scale is both: ",self.scale)
             with torch.no_grad():
-                self.conv2.weight *= 0.001      
+                self.conv2.weight *= 0.0      
         self.printed = 0  
 
 
