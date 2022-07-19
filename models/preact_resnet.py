@@ -14,7 +14,7 @@ class PreActBlock(nn.Module):
     '''Pre-activation version of the BasicBlock.'''
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1, scale='none', id=0, activations=[0], **kwargs):
+    def __init__(self, in_planes, planes, stride=1, scale='none', id=0, activations=[0], residual='yes', **kwargs):
         super(PreActBlock, self).__init__()
         print("preactblock: scale: ",scale)
         print("preactblock: kwargs: ",kwargs)
@@ -30,6 +30,7 @@ class PreActBlock(nn.Module):
         self.scale = scale
         self.id = id
         self.activations = activations
+        self.residual = residual
         if scale == 'separate' or scale == 'both':
             self.scale_factor = nn.Parameter(torch.zeros(1))
         if scale == 'native':
@@ -60,7 +61,8 @@ class PreActBlock(nn.Module):
                     print("activated!")
                     print("id: ",self.id, " scale: ", self.scale_factor)
                     self.printed += 1
-            out += shortcut
+            if self.residual == 'yes':
+                out += shortcut
         else:
             out = shortcut
         return out

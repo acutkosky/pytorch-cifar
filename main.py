@@ -10,6 +10,7 @@ import torchvision.transforms as transforms
 
 import os
 import argparse
+import sys
 
 from models import *
 from tqdm import tqdm
@@ -28,6 +29,7 @@ parser.add_argument('--stagewise', type=str, default='all', choices=['all', 'for
 parser.add_argument('--patience', type=int, default=10)
 parser.add_argument('--layer_count', type=int, default=2)
 parser.add_argument('--retrain', type=str, default='no', choices=['no', 'first', 'last'])
+parser.add_argument('--residual', type=str, default='yes', choices=['no', 'yes'])
 parser.add_argument('--retrain_addition', type=int, default=2)
 parser.add_argument('--arch', default='resnet18', choices=['resnet18', 'preactresnet18', 'preactresnetmany'])
 parser.add_argument('--wd', default=5e-4, type=float)
@@ -73,7 +75,7 @@ if args.arch == 'resnet18':
 if args.arch == 'preactresnet18':
     net = PreActResNet18(scale=args.scale, stagewise=args.stagewise)
 if args.arch == 'preactresnetmany':
-    net = PreActResNetMany(layer_count=args.layer_count, scale=args.scale, stagewise=args.stagewise)
+    net = PreActResNetMany(layer_count=args.layer_count, scale=args.scale, stagewise=args.stagewise, residual=args.residual)
 # net = PreActResNet18()
 # net = GoogLeNet()
 # net = DenseNet121()
@@ -186,9 +188,6 @@ def test(epoch, it_total):
         best_acc = acc
     return correct/total
 
-wandb.init(project=args.wandb_project)
-wandb.config.update(args)
-
 examples = 0
 it_total = 0
 activate_best_acc = 0
@@ -251,6 +250,12 @@ if args.retrain != 'no':
             net.module.activate()
         else:
             net.module.activate(-1)
+print(f"activated: {net.module.activated_layers}, unactivead: {net.module.unactivated_ids}")
+
+
+wandb.init(project=args.wandb_project)
+wandb.config.update(args)
+
 
 examples, it_total, activate_best_acc, activations = run_training(start_epoch, epoch_count, examples, it_total, activate_best_acc, patience, activations)
 
