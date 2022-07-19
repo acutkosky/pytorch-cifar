@@ -226,10 +226,11 @@ def run_training(start_epoch, epoch_count, examples, it_total, activate_best_acc
             },
             step = it_total)
         if bad_epochs > patience and args.stagewise != 'all':
-            if args.stagewise == 'forward':
-                activations = net.module.activate()
-            if args.stagewise == 'backward':
-                activations = net.module.activate(-1)
+            if args.retrain == 'no':
+                if args.stagewise == 'forward':
+                    activations = net.module.activate()
+                if args.stagewise == 'backward':
+                    activations = net.module.activate(-1)
             # activations += 1
             bad_epochs = 0
         wandb.log({
