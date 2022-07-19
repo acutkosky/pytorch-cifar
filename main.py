@@ -28,7 +28,7 @@ parser.add_argument('--stagewise', type=str, default='all', choices=['all', 'for
 parser.add_argument('--patience', type=int, default=10)
 parser.add_argument('--layer_count', type=int, default=2)
 parser.add_argument('--retrain', type=str, default='no', choices=['no', 'first', 'last'])
-parser.add_arguemnt('--retrain_addition', type=int, default=2)
+parser.add_argument('--retrain_addition', type=int, default=2)
 parser.add_argument('--arch', default='resnet18', choices=['resnet18', 'preactresnet18', 'preactresnetmany'])
 parser.add_argument('--wd', default=5e-4, type=float)
 parser.add_argument('--tag', default='none')
@@ -204,6 +204,7 @@ def run_training(start_epoch, epoch_count, examples, it_total, activate_best_acc
                         momentum=0.9, weight_decay=args.wd)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_count)
     print(f"running for: {list(range(start_epoch, start_epoch+epoch_count))} epochs...")
+    bad_epochs = 0
     for epoch in range(start_epoch, start_epoch+epoch_count):
         examples, it_total = train(epoch, examples, it_total, optimizer)
         acc = test(epoch, it_total)
