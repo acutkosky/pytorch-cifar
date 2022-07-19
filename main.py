@@ -233,6 +233,7 @@ def run_training(start_epoch, epoch_count, examples, it_total, activate_best_acc
                     activations = net.module.activate(-1)
             # activations += 1
             bad_epochs = 0
+        activations = len(net.module.activated_layers) - 1 
         wandb.log({
             'activations': activations,
             },
