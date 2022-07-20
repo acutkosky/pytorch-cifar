@@ -16,6 +16,8 @@ from models import *
 from tqdm import tqdm
 import wandb
 
+import freeopt
+
 torch.manual_seed(0)
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
@@ -34,6 +36,12 @@ parser.add_argument('--retrain_addition', type=int, default=2)
 parser.add_argument('--arch', default='resnet18', choices=['resnet18', 'preactresnet18', 'preactresnetmany'])
 parser.add_argument('--wd', default=5e-4, type=float)
 parser.add_argument('--tag', default='none')
+
+parser.add_argument('--optmain', default='sgd', choices=['sgd', 'free', 'sgd_nom', 'scalefree'])
+
+parser.add_argument('--optfollow', default='sgd', choices=['sgd', 'free', 'sgd_nom', 'scalefree'])
+parser.add_argument('--optreset', default='no', choices=['no', 'yes'])
+
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -197,11 +205,21 @@ activations = 0
 epoch_count = 200
 retrain_epochs = 100
 
-def run_training(start_epoch, epoch_count, examples, it_total, activate_best_acc, patience, activations):
-    print(f"run_training args: {(start_epoch, epoch_count, examples, it_total, activate_best_acc, patience, activations)}")
-    optimizer = optim.SGD(net.parameters(), lr=args.lr,
-                        momentum=0.9, weight_decay=args.wd)
+def run_training(start_epoch, epoch_count, examples, it_total, activate_best_acc, patience, activations, opttype):
+    print(f"run_training args: {(start_epoch, epoch_count, examples, it_total, activate_best_acc, patience, activations, opttype)}")
+    if opttype == 'sgd':
+        optimizer = optim.SGD(net.parameters(), lr=args.lr,
+                            momentum=0.9, weight_decay=args.wd)
+    elif opttype == 'free':
+        optimizer = freeopt.FreeOpt(net.parameters(), lr=args.lr)
+    elif opttype == 'sgd_nom':
+        optimizer = optim.SGD(net.parameters(), lr=args.lr,
+                            momentum=0.0, weight_decay=args.wd)
+    elif opttype == 'scalefree':
+        optimizer =freeopt.ScaleFree(net.parameters(), epsilon=args.lr)
+
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_count)
+
     print(f"running for: {list(range(start_epoch, start_epoch+epoch_count))} epochs...")
     bad_epochs = 0
     for epoch in range(start_epoch, start_epoch+epoch_count):
@@ -240,6 +258,8 @@ def run_training(start_epoch, epoch_count, examples, it_total, activate_best_acc
             },
             step = it_total)
         scheduler.step()
+        if args.optreset == 'yes':
+            optimizer.reset()
     return examples, it_total, activate_best_acc, activations
 
 
@@ -257,7 +277,8 @@ wandb.init(project=args.wandb_project)
 wandb.config.update(args)
 
 
-examples, it_total, activate_best_acc, activations = run_training(start_epoch, epoch_count, examples, it_total, activate_best_acc, patience, activations)
+examples, it_total, activate_best_acc, activations = run_training(start_epoch, epoch_count,
+                                        examples, it_total, activate_best_acc, patience, activations, args.optmain)
 
 print("finished initial training!")
 
@@ -266,4 +287,4 @@ if args.retrain != 'no':
         net.module.activate()
 
 
-    run_training(epoch_count, retrain_epochs, examples, it_total, activate_best_acc, patience, activations)
+    run_training(epoch_count, retrain_epochs, examples, it_total, activate_best_acc, patience, activations, args.optfollow)
