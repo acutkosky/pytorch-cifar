@@ -41,6 +41,8 @@ parser.add_argument('--optmain', default='sgd', choices=['sgd', 'free', 'sgd_nom
 
 parser.add_argument('--optfollow', default='sgd', choices=['sgd', 'free', 'sgd_nom', 'scalefree'])
 parser.add_argument('--optreset', default='no', choices=['no', 'yes'])
+parser.add_argument('--ministeps', default=1, type=int)
+parser.add_argument('--memorize', default='no', choices=['no', 'yes'])
 
 args = parser.parse_args()
 
@@ -127,25 +129,42 @@ def train(epoch, examples, it_total, optimizer):
     pbar = tqdm(enumerate(trainloader), total=len(trainloader))
     for batch_idx, (inputs, targets) in pbar:
         inputs, targets = inputs.to(device), targets.to(device)
-        optimizer.zero_grad()
-        outputs = net(inputs)
-        loss = criterion(outputs, targets)
-        loss.backward()
-        optimizer.step()
 
-        train_loss += loss.item()
-        _, predicted = outputs.max(1)
-        total += targets.size(0)
-        correct += predicted.eq(targets).sum().item()
-        examples += targets.size(0)
-        it_total += 1
-        wandb.log({
-            'examples': examples,
-            'epoch': epoch,
-            'train/accuracy': correct/total,
-            'train/loss': train_loss/(batch_idx+1)
+        ministeps = args.ministeps
+        memorize = args.memorize
+        if memorize == 'yes':
+            ministeps = 20
+        for s in range(ministeps):
+            optimizer.zero_grad()
+            outputs = net(inputs)
+            loss = criterion(outputs, targets)
+            loss.backward()
+            optimizer.step()
+
+            train_loss_now = loss.item()
+            _, predicted = outputs.max(1)
+            correct_now = predicted.eq(targets).sum().item()
+
+            if s == 0:
+                train_loss += train_loss_now
+                total += targets.size(0)
+                correct += correct_now
+                examples += targets.size(0)
+                it_total += 1
+                wandb.log({
+                    'examples': examples,
+                    'epoch': epoch,
+                    'train/accuracy': correct/total,
+                    'train/loss': train_loss/(batch_idx+1)
+                    },
+                    step = it_total)
+            wandb.log({
+                'step_per_batch': s+1,
             },
-            step = it_total)
+                step = it_total
+            )
+            if correct_now == 0 and args.memorize == 'yes':
+                break
 
 
         pbar.set_description('Loss: %.3f | Acc: %.3f%% (%d/%d)'
@@ -216,7 +235,7 @@ def run_training(start_epoch, epoch_count, examples, it_total, activate_best_acc
         optimizer = optim.SGD(net.parameters(), lr=args.lr,
                             momentum=0.0, weight_decay=args.wd)
     elif opttype == 'scalefree':
-        optimizer =freeopt.ScaleFree(net.parameters(), epsilon=args.lr)
+        optimizer =freeopt.ScaleFree(net.parameters(), epsilon=args.lr, wd=args.wd)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_count)
 
