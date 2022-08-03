@@ -15,8 +15,10 @@ import sys
 from models import *
 from tqdm import tqdm
 import wandb
+from omegaconf import OmegaConf
 
 import freeopt
+import perpopt
 
 torch.manual_seed(0)
 
@@ -37,14 +39,21 @@ parser.add_argument('--arch', default='resnet18', choices=['resnet18', 'preactre
 parser.add_argument('--wd', default=5e-4, type=float)
 parser.add_argument('--tag', default='none')
 
-parser.add_argument('--optmain', default='sgd', choices=['sgd', 'free', 'sgd_nom', 'scalefree'])
+parser.add_argument('--optmain', default='sgd', choices=['sgd', 'free', 'sgd_nom', 'scalefree', 'perp'])
 
 parser.add_argument('--optfollow', default='sgd', choices=['sgd', 'free', 'sgd_nom', 'scalefree'])
 parser.add_argument('--optreset', default='no', choices=['no', 'yes'])
 parser.add_argument('--ministeps', default=1, type=int)
 parser.add_argument('--memorize', default='no', choices=['no', 'yes'])
+parser.add_argument('--batch_size', default=128, type=int)
+parser.add_argument('--config', default=None)
 
 args = parser.parse_args()
+args = OmegaConf.create(vars(args))
+
+if args.config is not None:
+    conf = OmegaConf.load(args.config)
+    args = OmegaConf.merge(args, conf)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0  # best test accuracy
@@ -67,7 +76,7 @@ transform_test = transforms.Compose([
 trainset = torchvision.datasets.CIFAR10(
     root='./data', train=True, download=True, transform=transform_train)
 trainloader = torch.utils.data.DataLoader(
-    trainset, batch_size=128, shuffle=True, num_workers=2)
+    trainset, batch_size=args.batch_size, shuffle=True, num_workers=2)
 
 testset = torchvision.datasets.CIFAR10(
     root='./data', train=False, download=True, transform=transform_test)
@@ -133,13 +142,12 @@ def train(epoch, examples, it_total, optimizer):
         ministeps = args.ministeps
         memorize = args.memorize
         if memorize == 'yes':
-            ministeps = 20
+            ministeps = max(ministeps, 20)
         for s in range(ministeps):
             optimizer.zero_grad()
             outputs = net(inputs)
             loss = criterion(outputs, targets)
             loss.backward()
-            optimizer.step()
 
             train_loss_now = loss.item()
             _, predicted = outputs.max(1)
@@ -159,12 +167,15 @@ def train(epoch, examples, it_total, optimizer):
                     },
                     step = it_total)
             wandb.log({
-                'step_per_batch': s+1,
+                'step_per_batch': s,
+                'after_ministep_accuracy': correct_now/targets.size(0)
             },
                 step = it_total
             )
-            if correct_now == 0 and args.memorize == 'yes':
+            if correct_now == targets.size(0) and args.memorize == 'yes':
                 break
+
+            optimizer.step()
 
 
         pbar.set_description('Loss: %.3f | Acc: %.3f%% (%d/%d)'
@@ -236,6 +247,8 @@ def run_training(start_epoch, epoch_count, examples, it_total, activate_best_acc
                             momentum=0.0, weight_decay=args.wd)
     elif opttype == 'scalefree':
         optimizer =freeopt.ScaleFree(net.parameters(), epsilon=args.lr, wd=args.wd)
+    elif opttype == 'perpopt':
+        optimizer = perpopt.PerpOpt(net.parameters(), lr=args.lr, wd=args.wd, beta=0.9)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_count)
 
@@ -293,7 +306,7 @@ print(f"activated: {net.module.activated_layers}, unactivead: {net.module.unacti
 
 
 wandb.init(project=args.wandb_project)
-wandb.config.update(args)
+wandb.config.update(OmegaConf.to_container(args))
 
 
 examples, it_total, activate_best_acc, activations = run_training(start_epoch, epoch_count,
