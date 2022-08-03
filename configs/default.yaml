@@ -1,0 +1,20 @@
+lr : 0.1
+resume: True
+wandb_project: null
+scale: 'none'
+threshold: 0.01
+stagewise: 'all'
+patience: 10
+layer_count: 2
+retrain: 'no'
+residual: 'yes'
+retrain_addition: 2
+arch: 'preactresnetmany'
+wd: 5e-4
+tag: 'none'
+optmain: 'sgd'
+optfollow: 'sgd'
+optreset: 'no'
+ministeps: 1
+memorize: 'no'
+batch_size: 128
