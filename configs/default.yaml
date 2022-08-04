@@ -18,3 +18,8 @@ optreset: 'no'
 ministeps: 1
 memorize: 'no'
 batch_size: 128
+zerofinal: 'no'
+onlylinear: False
+perpopt_conf:
+  beta: 0.9
+  alignbeta: 1.0

@@ -44,7 +44,27 @@ class PerpOpt(torch.optim.Optimizer):
             lr = group['lr']
             wd = group['wd']
             beta = group['beta']
-            alignebeta = group['alignbeta']
+            alignbeta = group['alignbeta']
+
+            alignment = 0.0#torch.zeros(1)
+            mom_norm_squared = 0.0#torch.zeros(1)
+            for param in group['params']:
+                if param.grad is None:
+                    continue
+                
+                
+                grad = param.grad
+
+                state = self.state[param]
+
+                momentum = state['momentum']
+
+                alignment += torch.sum(grad * momentum)
+                mom_norm_squared += torch.norm(momentum)**2
+
+
+
+
             for param in group['params']:
                 if param.grad is None:
                     continue
@@ -56,14 +76,24 @@ class PerpOpt(torch.optim.Optimizer):
                 momentum = state['momentum']
 
                 alignment = torch.sum(grad * momentum)
+                mom_norm_squared = torch.norm(momentum)**2
 
-                grad_perp = grad - alignment * momentum / torch.norm(momentum)**2
-                grad_parallel = alignment * momentum / torch.norm(momentum)**2 * (1.0 - alignbeta * (alignment > 0))
+                grad_perp = grad - alignment * momentum / mom_norm_squared
+                grad_parallel = alignment * momentum / mom_norm_squared * (1.0 - alignbeta * (alignment < 0))
 
-                delta = grad_perp + grad_parallel 
+
+                delta = grad_perp + grad_parallel
+                # delta = delta / (torch.norm(delta) + SMALL_VALUE)
+
+
+                assert torch.sum(delta * momentum) > (-1e-6 * torch.norm(momentum)*torch.norm(delta)), f"momentum not projected out: {torch.sum(delta*momentum)}, {torch.norm(momentum)}, {torch.norm(delta)}. {(-1e-6 * torch.norm(momentum)*torch.norm(delta))}!"
+                # delta = delta/(torch.norm(delta)+SMALL_VALUE)
 
                 momentum.add_(grad *(1.0-beta)/beta)
                 momentum.mul_(beta)
+
+                delta += wd * param
+
 
                 param.sub_(delta * lr)
 

@@ -35,7 +35,7 @@ class PreActBlock(nn.Module):
             self.scale_factor = nn.Parameter(torch.zeros(1))
         if scale == 'native':
             with torch.no_grad():
-                self.conv2.weight *= 0.00001
+                self.conv2.weight *= 0.0000001
         if scale == 'both':
             print("scale is both: ",self.scale)
             with torch.no_grad():
@@ -111,6 +111,10 @@ class PreActResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2, **kwargs)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2, **kwargs)
         self.linear = nn.Linear(512*block.expansion, num_classes)
+        if kwargs['zerofinal'] == 'yes':
+            with torch.no_grad():
+                self.linear.weight.mul_(0.0)
+                self.linear.bias.mul_(0.0)
 
         if stagewise == 'all':
             for i in range(1, self.num_blocks+1):
@@ -161,8 +165,9 @@ class PreActResNet(nn.Module):
 def PreActResNet18(**kwargs):
     return PreActResNet(PreActBlock, [2,2,2,2], **kwargs)
 
-def PreActResNetMany(layer_count, **kwargs):
-    return PreActResNet(PreActBlock, [layer_count] * 4, **kwargs)
+def PreActResNetMany(**kwargs):
+    print(kwargs)
+    return PreActResNet(PreActBlock, [kwargs['layer_count']] * 4, **kwargs)
 
 def PreActResNet34():
     return PreActResNet(PreActBlock, [3,4,6,3])

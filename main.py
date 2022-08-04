@@ -47,6 +47,7 @@ parser.add_argument('--ministeps', default=1, type=int)
 parser.add_argument('--memorize', default='no', choices=['no', 'yes'])
 parser.add_argument('--batch_size', default=128, type=int)
 parser.add_argument('--config', default=None)
+parser.add_argument('--zerofinal', default='no', choices=['no','yes'])
 
 args = parser.parse_args()
 args = OmegaConf.create(vars(args))
@@ -94,7 +95,7 @@ if args.arch == 'resnet18':
 if args.arch == 'preactresnet18':
     net = PreActResNet18(scale=args.scale, stagewise=args.stagewise)
 if args.arch == 'preactresnetmany':
-    net = PreActResNetMany(layer_count=args.layer_count, scale=args.scale, stagewise=args.stagewise, residual=args.residual)
+    net = PreActResNetMany(**OmegaConf.to_container(args))#layer_count=args.layer_count, scale=args.scale, stagewise=args.stagewise, residual=args.residual)
 # net = PreActResNet18()
 # net = GoogLeNet()
 # net = DenseNet121()
@@ -143,7 +144,7 @@ def train(epoch, examples, it_total, optimizer):
         memorize = args.memorize
         if memorize == 'yes':
             ministeps = max(ministeps, 20)
-        for s in range(ministeps):
+        for s in range(ministeps+1):
             optimizer.zero_grad()
             outputs = net(inputs)
             loss = criterion(outputs, targets)
@@ -172,6 +173,8 @@ def train(epoch, examples, it_total, optimizer):
             },
                 step = it_total
             )
+            if s >= ministeps:
+                break
             if correct_now == targets.size(0) and args.memorize == 'yes':
                 break
 
@@ -237,18 +240,23 @@ retrain_epochs = 100
 
 def run_training(start_epoch, epoch_count, examples, it_total, activate_best_acc, patience, activations, opttype):
     print(f"run_training args: {(start_epoch, epoch_count, examples, it_total, activate_best_acc, patience, activations, opttype)}")
+
+    if args.onlylinear:
+        parameters = net.module.linear.parameters()
+    else:
+        parameters = net.parameters()
     if opttype == 'sgd':
-        optimizer = optim.SGD(net.parameters(), lr=args.lr,
+        optimizer = optim.SGD(parameters, lr=args.lr,
                             momentum=0.9, weight_decay=args.wd)
     elif opttype == 'free':
-        optimizer = freeopt.FreeOpt(net.parameters(), lr=args.lr)
+        optimizer = freeopt.FreeOpt(parameters, lr=args.lr)
     elif opttype == 'sgd_nom':
-        optimizer = optim.SGD(net.parameters(), lr=args.lr,
+        optimizer = optim.SGD(parameters, lr=args.lr,
                             momentum=0.0, weight_decay=args.wd)
     elif opttype == 'scalefree':
-        optimizer =freeopt.ScaleFree(net.parameters(), epsilon=args.lr, wd=args.wd)
+        optimizer =freeopt.ScaleFree(parameters, epsilon=args.lr, wd=args.wd)
     elif opttype == 'perpopt':
-        optimizer = perpopt.PerpOpt(net.parameters(), lr=args.lr, wd=args.wd, beta=0.9)
+        optimizer = perpopt.PerpOpt(parameters, lr=args.lr, wd=args.wd, **OmegaConf.to_container(args)['perpopt_conf'])
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_count)
 
