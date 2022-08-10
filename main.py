@@ -20,7 +20,6 @@ from omegaconf import OmegaConf
 import freeopt
 import perpopt
 
-torch.manual_seed(0)
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
@@ -39,9 +38,9 @@ parser.add_argument('--arch', default='resnet18', choices=['resnet18', 'preactre
 parser.add_argument('--wd', default=5e-4, type=float)
 parser.add_argument('--tag', default='none')
 
-parser.add_argument('--optmain', default='sgd', choices=['sgd', 'free', 'sgd_nom', 'scalefree', 'perp'])
+parser.add_argument('--optmain', default='sgd', choices=['sgd', 'free', 'sgd_nom', 'scalefree', 'perpopt', 'adamw'])
 
-parser.add_argument('--optfollow', default='sgd', choices=['sgd', 'free', 'sgd_nom', 'scalefree'])
+parser.add_argument('--optfollow', default='sgd', choices=['sgd', 'free', 'sgd_nom', 'scalefree', 'perpopt', 'adamw'])
 parser.add_argument('--optreset', default='no', choices=['no', 'yes'])
 parser.add_argument('--ministeps', default=1, type=int)
 parser.add_argument('--memorize', default='no', choices=['no', 'yes'])
@@ -55,6 +54,10 @@ args = OmegaConf.create(vars(args))
 if args.config is not None:
     conf = OmegaConf.load(args.config)
     args = OmegaConf.merge(args, conf)
+
+torch.manual_seed(args.manual_seed)
+
+args_dict = OmegaConf.to_container(args)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0  # best test accuracy
@@ -93,7 +96,7 @@ print('==> Building model..')
 if args.arch == 'resnet18':
     net = ResNet18(args.scale)
 if args.arch == 'preactresnet18':
-    net = PreActResNet18(scale=args.scale, stagewise=args.stagewise)
+    net = PreActResNet18(**args_dict)
 if args.arch == 'preactresnetmany':
     net = PreActResNetMany(**OmegaConf.to_container(args))#layer_count=args.layer_count, scale=args.scale, stagewise=args.stagewise, residual=args.residual)
 # net = PreActResNet18()
@@ -235,7 +238,7 @@ activate_best_acc = 0
 patience = args.patience
 bad_epochs = 0
 activations = 0
-epoch_count = 200
+epoch_count = args.epochs
 retrain_epochs = 100
 
 def run_training(start_epoch, epoch_count, examples, it_total, activate_best_acc, patience, activations, opttype):
@@ -257,6 +260,8 @@ def run_training(start_epoch, epoch_count, examples, it_total, activate_best_acc
         optimizer =freeopt.ScaleFree(parameters, epsilon=args.lr, wd=args.wd)
     elif opttype == 'perpopt':
         optimizer = perpopt.PerpOpt(parameters, lr=args.lr, wd=args.wd, **OmegaConf.to_container(args)['perpopt_conf'])
+    elif opttype == 'adamw':
+        optimizer = optim.AdamW(parameters, lr=args.lr, weight_decay=args.wd)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_count)
 
@@ -314,7 +319,7 @@ print(f"activated: {net.module.activated_layers}, unactivead: {net.module.unacti
 
 
 wandb.init(project=args.wandb_project)
-wandb.config.update(OmegaConf.to_container(args))
+wandb.config.update(args_dict)
 
 
 examples, it_total, activate_best_acc, activations = run_training(start_epoch, epoch_count,

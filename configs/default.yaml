@@ -1,4 +1,5 @@
 lr : 0.1
+epochs: 20
 resume: True
 wandb_project: null
 scale: 'none'
@@ -20,6 +21,11 @@ memorize: 'no'
 batch_size: 128
 zerofinal: 'no'
 onlylinear: False
+bn_order: 'last'
+norm_type: 'batch'
+eps: 1e-8
+norm_affine: False
+manual_seed: 10
 perpopt_conf:
   beta: 0.9
   alignbeta: 1.0

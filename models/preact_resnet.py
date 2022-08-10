@@ -7,6 +7,7 @@ Reference:
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import layers.condnorm as condnorm
 import wandb
 
 
@@ -14,13 +15,27 @@ class PreActBlock(nn.Module):
     '''Pre-activation version of the BasicBlock.'''
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1, scale='none', id=0, activations=[0], residual='yes', **kwargs):
+    def __init__(self, in_planes, planes, stride=1, scale='none', id=0, activations=[0], residual='yes', bn_order='first', norm_type='batch', norm_affine=True, eps=1e-5, **kwargs):
         super(PreActBlock, self).__init__()
-        print("preactblock: scale: ",scale)
-        print("preactblock: kwargs: ",kwargs)
-        self.bn1 = nn.BatchNorm2d(in_planes)
+        # print("preactblock: scale: ",scale)
+        # print("preactblock: kwargs: ",kwargs)
+        if norm_type == 'batch':
+            norm = lambda x: nn.BatchNorm2d(x, affine=norm_affine, eps=eps)
+            # altnorm = lambda x: condnorm.CondNorm2d(x, affine=norm_affine, eps=eps)
+        elif norm_type == 'cond':
+            norm = lambda x: condnorm.CondNorm2d(x, affine=norm_affine, eps=eps)
+            # altnorm = lambda x: nn.BatchNorm2d(x, affine=norm_affine, eps=eps)
+        elif norm_type == 'instance':
+            norm = lambda x: nn.InstanceNorm2d(x, affine=norm_affine, eps=eps)
+            # altnorm = lambda x: nn.BatchNorm2d(x, affine=norm_affine, eps=eps)
+        elif norm_type == 'none':
+            norm = lambda x: torch.nn.Identity()
+        else:
+            raise ValueError(f'incorrect setting for norm_type: {norm_type}')
+        self.bn1 = norm(in_planes)
+        # self.alt_bn1 =altnorm(in_planes)
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(planes)
+        self.bn2 = norm(planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
 
         if stride != 1 or in_planes != self.expansion*planes:
@@ -42,13 +57,30 @@ class PreActBlock(nn.Module):
                 self.conv2.weight *= 0.001      
         self.printed = 0  
 
+        self.bn_order = bn_order
+
 
     def forward(self, x):
-        out = F.relu(self.bn1(x))
+        if self.bn_order == 'first':
+            # pre_bn = x
+            out = F.relu(self.bn1(x))
+            # alt_out = F.relu(self.alt_bn1(x))
+        else:
+            # pre_bn = F.relu(x)
+            out = self.bn1(F.relu(x))
+            # alt_out = self.alt_bn1(F.relu(x))
+        # diff = torch.abs(alt_out-out)
+        # if self.training:
+        #     assert torch.allclose(out, alt_out,rtol=1e-5, atol=1e-5), f"out------------\n{out}\naltout-------\n{alt_out}\ndiff-----\n{alt_out-out}\nmax: {torch.argmax(diff)}, shape: {alt_out.shape}" #. diff[0][13][2][4]: {diff[:,13,2,4]}, {out[:, 13, 2, 4]}, {alt_out[:, 13, 2, 4]}, {pre_bn[:, 13, 2, 4]} "
+        # assert(1==2)
         shortcut = self.shortcut(out) if hasattr(self, 'shortcut') else x
         if self.id in self.activations:
             out = self.conv1(out)
-            out = self.conv2(F.relu(self.bn2(out)))
+            if self.bn_order == 'first':
+                out = F.relu(self.bn2(out))
+            else:
+                out = self.bn2(F.relu(out))
+            out = self.conv2(out)
             if self.scale == 'separate' or self.scale == 'both':
                 out *= torch.tanh(self.scale_factor)
                 wandb.log({
@@ -126,7 +158,7 @@ class PreActResNet(nn.Module):
     def _make_layer(self, block, planes, num_blocks, stride, **kwargs):
         strides = [stride] + [1]*(num_blocks-1)
         layers = []
-        print("kwargs: ",kwargs)
+        # print("kwargs: ",kwargs)
         for stride in strides:
             self.num_blocks += 1
             layers.append(block(self.in_planes, planes, stride, id=self.num_blocks, activations=self.activated_layers, **kwargs))
