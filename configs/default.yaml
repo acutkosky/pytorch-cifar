@@ -26,6 +26,7 @@ norm_type: 'batch'
 eps: 1e-8
 norm_affine: False
 manual_seed: 10
+norm_momentum: 0.1
 perpopt_conf:
   beta: 0.9
   alignbeta: 1.0

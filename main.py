@@ -262,6 +262,8 @@ def run_training(start_epoch, epoch_count, examples, it_total, activate_best_acc
         optimizer = perpopt.PerpOpt(parameters, lr=args.lr, wd=args.wd, **OmegaConf.to_container(args)['perpopt_conf'])
     elif opttype == 'adamw':
         optimizer = optim.AdamW(parameters, lr=args.lr, weight_decay=args.wd)
+    else:
+        raise ValueError(f'unknown optimizer: {optimizer}')
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_count)
 

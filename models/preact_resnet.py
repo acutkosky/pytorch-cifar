@@ -15,19 +15,25 @@ class PreActBlock(nn.Module):
     '''Pre-activation version of the BasicBlock.'''
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1, scale='none', id=0, activations=[0], residual='yes', bn_order='first', norm_type='batch', norm_affine=True, eps=1e-5, **kwargs):
+    def __init__(self, in_planes, planes, stride=1, scale='none', id=0,
+                 activations=[0], residual='yes', bn_order='first', norm_type='batch',
+                 norm_affine=True, eps=1e-5, norm_momentum=0.1, **kwargs):
         super(PreActBlock, self).__init__()
         # print("preactblock: scale: ",scale)
         # print("preactblock: kwargs: ",kwargs)
         if norm_type == 'batch':
-            norm = lambda x: nn.BatchNorm2d(x, affine=norm_affine, eps=eps)
+            norm = lambda x: nn.BatchNorm2d(x, affine=norm_affine, eps=eps, momentum=norm_momentum)
             # altnorm = lambda x: condnorm.CondNorm2d(x, affine=norm_affine, eps=eps)
         elif norm_type == 'cond':
-            norm = lambda x: condnorm.CondNorm2d(x, affine=norm_affine, eps=eps)
+            norm = lambda x: condnorm.CondNorm2d(x, affine=norm_affine, eps=eps, momentum=norm_momentum)
             # altnorm = lambda x: nn.BatchNorm2d(x, affine=norm_affine, eps=eps)
         elif norm_type == 'instance':
             norm = lambda x: nn.InstanceNorm2d(x, affine=norm_affine, eps=eps)
             # altnorm = lambda x: nn.BatchNorm2d(x, affine=norm_affine, eps=eps)
+        elif norm_type == 'dimension':
+            norm = lambda x: condnorm.DimensionalNorm(eps=eps)
+        elif norm_type == 'diag':
+            norm = lambda x: condnorm.DiagNorm(eps=eps, momentum=norm_momentum)
         elif norm_type == 'none':
             norm = lambda x: torch.nn.Identity()
         else:

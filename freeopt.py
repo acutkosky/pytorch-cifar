@@ -120,17 +120,22 @@ class FreeOpt(Optimizer):
 
 class ScaleFree(torch.optim.Optimizer):
 
-    def __init__(self, params, epsilon=1.0, constraint=1.0):
-        super().__init__(params, {'epsilon': epsilon, 'constraint': constraint, 'lr': epsilon})
+    def __init__(self, params, epsilon=1.0, constraint=1.0, b_update=False, zero_center=False, wd=0.0):
+        super().__init__(params, {'epsilon': epsilon, 'constraint': constraint, 'lr': epsilon, 'wd': wd})
         self.__setstate__(self.state)
 
-    def reset(self, epsilon=None, constraint=None, zero_center=False):
+        self.zero_center = zero_center
+        self.b_update = b_update
+
+    def reset(self, epsilon=None, constraint=None, zero_center=None):
         for group in self.param_groups:
             if epsilon is not None:
                 group['epsilon'] = epsilon
             if constraint is not None:
                 group['constraint'] = constraint
-        self.zero_center = zero_center
+
+        if zero_center is not None:
+            self.zero_center = zero_center
         self.__setstate__(self.state)
 
     def __setstate__(self, state):
@@ -178,6 +183,7 @@ class ScaleFree(torch.optim.Optimizer):
         for group in self.param_groups:
             epsilon = group['epsilon']
             constraint = group['constraint']
+            wd = group['wd']
             for param in group['params']:
                 if param.grad is None:
                     continue
@@ -195,6 +201,9 @@ class ScaleFree(torch.optim.Optimizer):
 
                 grad = param.grad
 
+
+                grad += wd * param
+
                 abs_grad = torch.abs(grad)
                 
                 trunc_grad = torch.clip(grad, -h, h)
@@ -210,7 +219,8 @@ class ScaleFree(torch.optim.Optimizer):
                 theta.add_(-constraint_grad)
                 V.add_(torch.square(constraint_grad))
                 b_increment.add_(torch.square(constraint_grad/h))
-                B.add_(4*b_increment)
+                if self.b_update:
+                    B.add_(4*b_increment)
                 h.copy_(next_h)
 
                 alpha = epsilon/(torch.sqrt(B) * torch.square(torch.log(B)))
